@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 
 /**
  * Mod Operations State Machine
@@ -57,12 +57,14 @@ const STATUS_MESSAGES = {
   [STATES.IDLE]: '',
   [STATES.IMPORTING]: 'Importing mods...',
   [STATES.RESTORING]: 'Restoring original files...',
-  [STATES.COMPLETED]: 'Operation completed',
+  [STATES.COMPLETED]: 'Operation completed successfully',
   [STATES.ERROR]: '' // Error message is dynamic
 }
 
 /**
  * Custom hook for managing mod import/restore operations with a state machine
+ * Provides type-safe state management with transition guards
+ *
  * @returns {Object} State machine interface
  */
 export function useModOperations() {
@@ -70,9 +72,11 @@ export function useModOperations() {
   const [errorMessage, setErrorMessage] = useState('')
   const [operation, setOperation] = useState(null)
   const [result, setResult] = useState(null)
+  const [startTime, setStartTime] = useState(null)
 
   // Use ref to track pending operations for race condition prevention
   const isTransitioning = useRef(false)
+  const transitionHistory = useRef([])
 
   /**
    * Attempt a state transition
@@ -97,19 +101,46 @@ export function useModOperations() {
     isTransitioning.current = true
 
     try {
+      const previousState = state
       setState(nextState)
 
-      if (action === 'error') {
-        setErrorMessage(payload.message || 'An error occurred')
-      } else if (action === 'reset') {
-        setErrorMessage('')
-        setResult(null)
-        setOperation(null)
-      } else if (action === 'complete') {
-        setResult(payload.result || null)
+      // Handle payload based on action type
+      switch (action) {
+        case 'error':
+          setErrorMessage(payload.message || 'An error occurred')
+          break
+        case 'reset':
+          setErrorMessage('')
+          setResult(null)
+          setOperation(null)
+          setStartTime(null)
+          break
+        case 'complete':
+          setResult(payload.result || null)
+          break
+        case 'startImport':
+        case 'startRestore':
+          setStartTime(Date.now())
+          break
+        default:
+          break
       }
 
-      console.log(`[StateMachine] ${state} -> ${nextState} (${action})`)
+      // Log transition for debugging
+      const transitionRecord = {
+        from: previousState,
+        to: nextState,
+        action,
+        timestamp: Date.now()
+      }
+      transitionHistory.current.push(transitionRecord)
+
+      // Keep only last 100 transitions
+      if (transitionHistory.current.length > 100) {
+        transitionHistory.current = transitionHistory.current.slice(-100)
+      }
+
+      console.log(`[StateMachine] ${previousState} -> ${nextState} (${action})`)
       return true
     } finally {
       // Small delay to ensure state updates have processed
@@ -169,31 +200,56 @@ export function useModOperations() {
     return transition('reset')
   }, [transition])
 
-  /**
-   * Check if any operation is currently running
-   * @returns {boolean}
-   */
-  const isRunning = state === STATES.IMPORTING || state === STATES.RESTORING
+  // ─────────────────────────────────────────────────────────
+  // COMPUTED VALUES
+  // ─────────────────────────────────────────────────────────
 
-  /**
-   * Check if currently importing
-   * @returns {boolean}
-   */
-  const isImporting = state === STATES.IMPORTING
+  const isRunning = useMemo(() =>
+    state === STATES.IMPORTING || state === STATES.RESTORING,
+    [state]
+  )
 
-  /**
-   * Check if currently restoring
-   * @returns {boolean}
-   */
-  const isRestoring = state === STATES.RESTORING
+  const isImporting = useMemo(() =>
+    state === STATES.IMPORTING,
+    [state]
+  )
 
-  /**
-   * Get the current status message
-   * @returns {string}
-   */
-  const statusMessage = state === STATES.ERROR
-    ? `Error: ${errorMessage}`
-    : STATUS_MESSAGES[state]
+  const isRestoring = useMemo(() =>
+    state === STATES.RESTORING,
+    [state]
+  )
+
+  const isIdle = useMemo(() =>
+    state === STATES.IDLE,
+    [state]
+  )
+
+  const isCompleted = useMemo(() =>
+    state === STATES.COMPLETED,
+    [state]
+  )
+
+  const isError = useMemo(() =>
+    state === STATES.ERROR,
+    [state]
+  )
+
+  const statusMessage = useMemo(() => {
+    if (state === STATES.ERROR) {
+      return `Error: ${errorMessage}`
+    }
+    return STATUS_MESSAGES[state]
+  }, [state, errorMessage])
+
+  const elapsedTime = useMemo(() => {
+    if (!startTime || isIdle) return null
+    return Date.now() - startTime
+  }, [startTime, isIdle, state])
+
+  const canStartOperation = useMemo(() =>
+    isIdle && !isTransitioning.current,
+    [isIdle]
+  )
 
   return {
     // State
@@ -206,10 +262,13 @@ export function useModOperations() {
     isRunning,
     isImporting,
     isRestoring,
-    isIdle: state === STATES.IDLE,
-    isCompleted: state === STATES.COMPLETED,
-    isError: state === STATES.ERROR,
+    isIdle,
+    isCompleted,
+    isError,
+    canStartOperation,
     statusMessage,
+    elapsedTime,
+    transitionHistory: transitionHistory.current,
 
     // Actions
     startImport,

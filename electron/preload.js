@@ -5,6 +5,8 @@ import {
   ADD_CUSTOM_PATH,
   REMOVE_CUSTOM_PATH,
   REFRESH_PYTHON,
+  INSTALL_PYTHON,
+  PYTHON_INSTALL_STATUS,
   SELECT_GAME_PATH,
   AUTO_DETECT_GAME,
   SCAN_MODS,
@@ -26,6 +28,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Python detection
   refreshPython: () => ipcRenderer.invoke(REFRESH_PYTHON),
+  installPython: () => ipcRenderer.invoke(INSTALL_PYTHON),
+  onPythonInstallStatus: (callback) => {
+    const handler = (_event, data) => callback(data)
+    ipcRenderer.on(PYTHON_INSTALL_STATUS, handler)
+    return () => ipcRenderer.removeListener(PYTHON_INSTALL_STATUS, handler)
+  },
 
   // Game path
   selectGamePath: () => ipcRenderer.invoke(SELECT_GAME_PATH),

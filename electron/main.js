@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
-import { detectPython, scanMods, toggleMod, ensureImporter, runImporter, runRestore, downloadMod, installLocalMod } from './modEngine.js'
+import { detectPython, installPython, scanMods, toggleMod, ensureImporter, runImporter, runRestore, downloadMod, installLocalMod } from './modEngine.js'
 import { get as getSetting, set as setSetting } from './settings.js'
 import {
   GET_SETTINGS,
@@ -10,6 +10,7 @@ import {
   ADD_CUSTOM_PATH,
   REMOVE_CUSTOM_PATH,
   REFRESH_PYTHON,
+  INSTALL_PYTHON,
   SELECT_GAME_PATH,
   AUTO_DETECT_GAME,
   SCAN_MODS,
@@ -87,6 +88,16 @@ ipcMain.handle(GET_SETTINGS, () => {
 ipcMain.handle(REFRESH_PYTHON, () => {
   const pythonInfo = detectPython()
   return pythonInfo
+})
+
+// Install Python automatically (Windows only - uses embeddable package)
+ipcMain.handle(INSTALL_PYTHON, async () => {
+  try {
+    const result = await installPython(mainWindow?.webContents)
+    return result
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
 })
 
 // Get user's custom game detection paths

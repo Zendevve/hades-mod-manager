@@ -11,6 +11,8 @@ export const REMOVE_CUSTOM_PATH = 'remove-custom-path'
 
 // Python detection
 export const REFRESH_PYTHON = 'refresh-python'
+export const INSTALL_PYTHON = 'install-python'
+export const PYTHON_INSTALL_STATUS = 'python-install-status'
 
 // Game path
 export const SELECT_GAME_PATH = 'select-game-path'

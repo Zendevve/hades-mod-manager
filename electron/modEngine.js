@@ -2,7 +2,8 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, spawn } from 'child_process'
 import { fileURLToPath } from 'url'
-import { IMPORT_LOG, DOWNLOAD_STATUS } from './ipcChannels.js'
+import { app } from 'electron'
+import { IMPORT_LOG, DOWNLOAD_STATUS, PYTHON_INSTALL_STATUS } from './ipcChannels.js'
 import https from 'https'
 import http from 'http'
 import AdmZip from 'adm-zip'
@@ -95,8 +96,44 @@ async function safeFileOperation(operation, maxRetries = 3, delayMs = 100) {
 
 // ─── Python Detection ────────────────────────────────────────
 
+// Cache for embedded Python path
+let embeddedPythonPath = null
+
+/**
+ * Safe logging helper that sends logs to webContents if available
+ * @param {Object} webContents - Electron webContents for IPC
+ * @param {string} message - Log message
+ * @param {string} type - Log type ('info', 'error', 'success')
+ */
+function safeLog(webContents, message, type = 'info') {
+  console.log(`[PythonInstall] ${message}`)
+  if (webContents && !webContents.isDestroyed()) {
+    try {
+      webContents.send(PYTHON_INSTALL_STATUS, { status: message, type, progress: null })
+    } catch (err) {
+      console.error('Failed to send log:', err)
+    }
+  }
+}
+
 export function detectPython() {
   try {
+    // First check if we have an embedded Python installed
+    if (embeddedPythonPath && fs.existsSync(embeddedPythonPath)) {
+      try {
+        const version = execSync(`"${embeddedPythonPath}" --version`, {
+          encoding: 'utf-8',
+          timeout: 5000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        }).trim()
+        return { found: true, command: embeddedPythonPath, version, success: true, isEmbedded: true }
+      } catch {
+        // Embedded Python not working, reset and try system
+        embeddedPythonPath = null
+      }
+    }
+
+    // Check for system Python
     const candidates = ['python', 'python3', 'py']
     for (const cmd of candidates) {
       try {
@@ -106,7 +143,7 @@ export function detectPython() {
           stdio: ['pipe', 'pipe', 'pipe'],
         }).trim()
         if (version.toLowerCase().includes('python')) {
-          return { found: true, command: cmd, version, success: true }
+          return { found: true, command: cmd, version, success: true, isEmbedded: false }
         }
       } catch {
         // try next
@@ -117,6 +154,209 @@ export function detectPython() {
     console.error('Error detecting Python:', err)
     return { found: false, command: null, version: null, success: false, error: err.message }
   }
+}
+
+/**
+ * Downloads and installs Python embeddable package for Windows
+ * Uses python-3.11.9-embed-amd64.zip (stable version)
+ * @param {Object} webContents - Electron webContents for progress updates
+ * @returns {Promise<Object>} Installation result
+ */
+export async function installPython(webContents) {
+  const platform = os.platform()
+
+  if (platform !== 'win32') {
+    return {
+      success: false,
+      error: 'Automatic Python installation is currently only supported on Windows. Please install Python manually from python.org',
+      platform
+    }
+  }
+
+  try {
+    safeLog(webContents, 'Starting Python installation...', 'info')
+
+    // Get user data directory for storing embedded Python
+    const userDataPath = app.getPath('userData')
+    const pythonDir = path.join(userDataPath, 'python-embed')
+    const pythonExePath = path.join(pythonDir, 'python.exe')
+
+    // Check if already installed
+    if (fs.existsSync(pythonExePath)) {
+      safeLog(webContents, 'Found existing Python installation, verifying...', 'info')
+      try {
+        const version = execSync(`"${pythonExePath}" --version`, {
+          encoding: 'utf-8',
+          timeout: 5000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        }).trim()
+        embeddedPythonPath = pythonExePath
+        safeLog(webContents, `Python verified: ${version}`, 'success')
+        return { success: true, path: pythonExePath, version, isEmbedded: true }
+      } catch (err) {
+        safeLog(webContents, 'Existing Python verification failed, reinstalling...', 'info')
+        // Continue with reinstallation
+      }
+    }
+
+    // Python version to download (3.11.9 - stable and widely compatible)
+    const pythonVersion = '3.11.9'
+    const zipFileName = `python-${pythonVersion}-embed-amd64.zip`
+    const downloadUrl = `https://www.python.org/ftp/python/${pythonVersion}/${zipFileName}`
+    const tempZipPath = path.join(os.tmpdir(), zipFileName)
+
+    safeLog(webContents, `Downloading Python ${pythonVersion}...`, 'info')
+
+    // Download Python embeddable package
+    await new Promise((resolve, reject) => {
+      const request = https.get(downloadUrl, { timeout: 120000 }, (res) => {
+        // Handle redirects
+        if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) {
+          const redirectUrl = res.headers.location
+          if (!redirectUrl) {
+            reject(new Error('Redirect received but no Location header'))
+            return
+          }
+          safeLog(webContents, 'Following redirect...', 'info')
+          // Use http for the redirect if needed
+          const client = redirectUrl.startsWith('https') ? https : http
+          client.get(redirectUrl, { timeout: 120000 }, (redirectRes) => {
+            handleDownloadResponse(redirectRes, tempZipPath, webContents, resolve, reject)
+          }).on('error', reject)
+          return
+        }
+
+        handleDownloadResponse(res, tempZipPath, webContents, resolve, reject)
+      })
+
+      request.on('error', (err) => {
+        reject(new Error(`Download request failed: ${err.message}`))
+      })
+
+      request.on('timeout', () => {
+        request.destroy()
+        reject(new Error('Download timed out after 120 seconds'))
+      })
+    })
+
+    safeLog(webContents, 'Download complete, extracting...', 'info')
+
+    // Extract the ZIP file
+    try {
+      // Ensure directory exists
+      if (!fs.existsSync(pythonDir)) {
+        fs.mkdirSync(pythonDir, { recursive: true })
+      }
+
+      const zip = new AdmZip(tempZipPath)
+      zip.extractAllTo(pythonDir, true)
+      safeLog(webContents, 'Extraction complete', 'success')
+    } catch (err) {
+      throw new Error(`Failed to extract Python: ${err.message}`)
+    } finally {
+      // Cleanup temp file
+      try {
+        if (fs.existsSync(tempZipPath)) {
+          fs.unlinkSync(tempZipPath)
+        }
+      } catch (cleanupErr) {
+        console.warn('Failed to cleanup temp file:', cleanupErr)
+      }
+    }
+
+    // Verify the installation
+    safeLog(webContents, 'Verifying installation...', 'info')
+
+    if (!fs.existsSync(pythonExePath)) {
+      throw new Error('Python executable not found after extraction')
+    }
+
+    // Create python311._pth file to enable site-packages (needed for pip compatibility)
+    const pthFile = path.join(pythonDir, 'python311._pth')
+    if (fs.existsSync(pthFile)) {
+      let pthContent = fs.readFileSync(pthFile, 'utf-8')
+      // Uncomment import site line to enable site-packages
+      pthContent = pthContent.replace('#import site', 'import site')
+      fs.writeFileSync(pthFile, pthContent)
+    }
+
+    // Test the installation
+    const version = execSync(`"${pythonExePath}" --version`, {
+      encoding: 'utf-8',
+      timeout: 10000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim()
+
+    // Cache the path for future use
+    embeddedPythonPath = pythonExePath
+
+    safeLog(webContents, `Python ${pythonVersion} installed successfully!`, 'success')
+
+    return {
+      success: true,
+      path: pythonExePath,
+      version,
+      isEmbedded: true
+    }
+
+  } catch (err) {
+    console.error('Python installation failed:', err)
+    safeLog(webContents, `Installation failed: ${err.message}`, 'error')
+    return {
+      success: false,
+      error: err.message,
+      platform
+    }
+  }
+}
+
+/**
+ * Helper function to handle HTTP download response
+ */
+function handleDownloadResponse(res, tempPath, webContents, resolve, reject) {
+  if (res.statusCode !== 200) {
+    reject(new Error(`Download failed: ${res.statusCode} ${res.statusMessage}`))
+    return
+  }
+
+  const totalLength = parseInt(res.headers['content-length'] || '0', 10)
+  let downloadedLength = 0
+  let lastProgressUpdate = 0
+
+  const fileStream = fs.createWriteStream(tempPath)
+  res.pipe(fileStream)
+
+  res.on('data', (chunk) => {
+    downloadedLength += chunk.length
+    if (totalLength > 0) {
+      const progress = Math.round((downloadedLength / totalLength) * 100)
+      // Update progress every 5% to avoid spamming
+      if (progress >= lastProgressUpdate + 5 || progress === 100) {
+        lastProgressUpdate = progress
+        safeLog(webContents, `Downloading Python... ${progress}%`, 'info')
+        if (webContents && !webContents.isDestroyed()) {
+          webContents.send(PYTHON_INSTALL_STATUS, {
+            status: `Downloading Python... ${progress}%`,
+            type: 'info',
+            progress
+          })
+        }
+      }
+    } else {
+      const mb = Math.round(downloadedLength / 1024 / 1024 * 10) / 10
+      safeLog(webContents, `Downloading Python... ${mb}MB`, 'info')
+    }
+  })
+
+  fileStream.on('finish', () => {
+    fileStream.close()
+    resolve()
+  })
+
+  fileStream.on('error', (err) => {
+    fs.unlink(tempPath, () => { })
+    reject(new Error(`Failed to write download: ${err.message}`))
+  })
 }
 
 // ─── Modfile Schema Validation ───────────────────────────────
