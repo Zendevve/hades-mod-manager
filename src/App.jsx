@@ -47,7 +47,7 @@ export default function App() {
   // ─────────────────────────────────────────────────────────
 
   const enabledCount = useMemo(() =>
-    mods.filter(m => m.enabled).length,
+    (mods || []).filter(m => m.enabled).length,
     [mods]
   )
 
@@ -191,7 +191,7 @@ export default function App() {
   const refreshMods = useCallback(async () => {
     try {
       const result = await window.electronAPI.scanMods()
-      if (result.success) {
+      if (result.success && Array.isArray(result.mods)) {
         setMods(result.mods)
         // Update selected mod reference if it still exists
         if (selectedMod) {

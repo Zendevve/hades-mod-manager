@@ -25,7 +25,7 @@ function ModList({ mods, selectedMod, onSelectMod, onToggleMod, onRefresh }) {
 
   // Sort: Enabled first, then alphabetically
   const sortedMods = useMemo(() => {
-    return [...mods].sort((a, b) => {
+    return [...(mods || [])].sort((a, b) => {
       if (a.enabled && !b.enabled) return -1
       if (!a.enabled && b.enabled) return 1
       return a.name.localeCompare(b.name)

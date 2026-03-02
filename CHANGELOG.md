@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial project setup and foundation
 
+## [1.0.1] - 2026-03-02
+
+### Fixed
+
+- Fixed TypeError when mods data is not properly loaded from IPC response
+
 ## [1.0.0] - 2026-03-02
 
 ### Added
