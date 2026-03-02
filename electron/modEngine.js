@@ -131,6 +131,9 @@ export function detectPython() {
         // Embedded Python not working, reset and try system
         embeddedPythonPath = null
       }
+    } else if (embeddedPythonPath) {
+      // Cached path no longer exists, reset it
+      embeddedPythonPath = null
     }
 
     // Check for system Python

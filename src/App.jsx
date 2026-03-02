@@ -91,9 +91,11 @@ export default function App() {
   useEffect(() => {
     const cleanup = window.electronAPI.onImportLog((data) => {
       setLogs(prev => {
-        const updated = [...prev, data]
-        // Keep only the most recent 1000 entries to prevent memory leaks
-        return updated.length > 1000 ? updated.slice(-1000) : updated
+        // Use circular buffer approach - more efficient for fixed-size log
+        if (prev.length >= 100) {
+          return [...prev.slice(1), data]
+        }
+        return [...prev, data]
       })
     })
     return cleanup

@@ -8,18 +8,25 @@ const settingsPath = path.join(
 )
 
 let cache = null
+let cacheMtime = null
 
 function load() {
-  if (cache) return cache
   try {
     const dir = path.dirname(settingsPath)
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true })
     }
     if (fs.existsSync(settingsPath)) {
+      const stats = fs.statSync(settingsPath)
+      // Check if cache is stale (file modified externally or never loaded)
+      if (cache && cacheMtime === stats.mtimeMs) {
+        return cache
+      }
       cache = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))
+      cacheMtime = stats.mtimeMs
     } else {
       cache = {}
+      cacheMtime = null
     }
   } catch (err) {
     console.error('Failed to parse settings file:', err)
@@ -32,6 +39,7 @@ function load() {
       console.error('Failed to backup corrupted settings file:', backupErr)
     }
     cache = {}
+    cacheMtime = null
   }
   return cache
 }
@@ -46,6 +54,9 @@ function save() {
     const tempPath = `${settingsPath}.tmp`
     fs.writeFileSync(tempPath, JSON.stringify(cache, null, 2), 'utf-8')
     fs.renameSync(tempPath, settingsPath)
+    // Update cacheMtime to match the newly written file
+    const stats = fs.statSync(settingsPath)
+    cacheMtime = stats.mtimeMs
   } catch (err) {
     console.error('Failed to save settings:', err)
   }
