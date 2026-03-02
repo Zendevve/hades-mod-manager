@@ -40,6 +40,21 @@ A premium, hardware-accelerated desktop application for managing Hades game mods
    npm install
    ```
 
+   ### ⚠️ Important: Dependency Warnings
+
+   > **DO NOT run `npm audit fix` or `npm audit fix --force`**
+
+   When running `npm install`, you will see deprecation warnings for several packages (such as `inflight`, `rimraf`, `glob`, `tar`, and others). **This is expected and safe to ignore.**
+
+   **Why you should NOT attempt to fix these warnings:**
+
+   - These "vulnerabilities" are in **build-time dependencies only** (the electron-builder toolchain)
+   - This application runs entirely **locally** and does not access the internet, so these vulnerabilities pose no security risk
+   - Running `npm audit fix --force` will **break the application completely**, locking it into a permanent error screen
+   - Specifically, force-fixing dependencies will break the automatic Hades installation detection feature
+
+   **What to do:** Simply ignore the warnings during `npm install` and proceed with development. The dependencies will be properly updated in a future release.
+
 3. Start the development server:
    ```bash
    npm run dev

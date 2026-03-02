@@ -397,3 +397,44 @@ To completely reset the application:
 - [Architecture Overview](architecture.md)
 - [Component Documentation](components.md)
 - [Development Guide](development.md)
+
+---
+
+## npm install shows deprecation warnings and vulnerabilities
+
+### Symptoms
+
+When running `npm install`, you see deprecation warnings for packages such as:
+- `inflight`
+- `rimraf`
+- `glob`
+- `tar`
+- Other deprecated dependencies
+
+You may also see vulnerability warnings from `npm audit`.
+
+### Solution
+
+**These warnings are expected and safe to ignore.**
+
+The deprecated packages are build-time dependencies used by the electron-builder toolchain. They do not affect the runtime security or functionality of the application.
+
+### ⚠️ CRITICAL WARNING
+
+**Do NOT run `npm audit fix` or `npm audit fix --force`**
+
+Attempting to "fix" these warnings will break the application:
+
+- `npm audit fix` will have no effect on these specific warnings
+- `npm audit fix --force` will **break** the application
+
+### Why These Warnings Are Safe to Ignore
+
+1. **Build-time dependencies only** - These packages are part of the electron-builder toolchain used only during the build process
+2. **Local application** - The app runs locally without internet access, so network-related vulnerabilities do not apply
+3. **Breaking changes** - Force-updating these dependencies breaks the app's Hades installation detection functionality
+4. **Permanent error state** - Running `--force` can permanently lock the app in an error state requiring complete reinstallation
+
+### What to Do
+
+Simply run `npm install` as normal and ignore the deprecation warnings. The application will build and function correctly despite these warnings.

@@ -39,6 +39,16 @@ This will install all required dependencies including:
 - Lucide React icons
 - Development tools (ESLint, Prettier)
 
+> ⚠️ **Note about dependency warnings**
+>
+> During `npm install`, you may see deprecation warnings for some packages. **This is expected and safe to ignore.**
+>
+> - **Do NOT run `npm audit fix`** or **`npm audit fix --force`**
+> - These are build-time dependencies that do not affect the runtime security of the application
+> - The warnings come from transitive dependencies of Electron and Vite, which we cannot directly control
+>
+> For more details, see the [Troubleshooting Guide](troubleshooting.md#dependency-warnings).
+
 ### 3. Configure Development Settings
 
 Create a `.env` file in the project root (optional):
