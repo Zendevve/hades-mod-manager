@@ -140,6 +140,14 @@ hades-mod-manager/
 - **[Framer Motion](https://www.framer.com/motion/)** - Production-ready motion library
 - **[Phosphor Icons](https://phosphoricons.com/)** - Flexible icon family
 
+## Support the Project
+
+If you find Hades Mod Manager helpful, consider supporting its development:
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/zendevve)
+
+Your support helps maintain and improve this tool for the Hades modding community!
+
 ## Credits
 
 Powered by the [SGG-Mod-Format](https://github.com/SGG-Modding/SGG-Mod-Format) community modding engine.

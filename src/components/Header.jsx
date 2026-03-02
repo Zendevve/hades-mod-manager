@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react'
-import { FolderOpen, Flame, MapPin, DownloadSimple, ArrowsClockwise } from '@phosphor-icons/react'
+import { FolderOpen, Flame, MapPin, DownloadSimple, ArrowsClockwise, Coffee } from '@phosphor-icons/react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
@@ -172,6 +172,19 @@ function Header({
           <FolderOpen weight="bold" aria-hidden="true" />
           <span className="hidden sm:inline">Change</span>
         </button>
+
+        {/* Support Button */}
+        <a
+          href="https://buymeacoffee.com/zendevve"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-magnetic px-3 py-1.5 text-xs font-semibold rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-zinc-950 transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(232,166,52,0.3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+          aria-label="Support the developer on Buy Me a Coffee"
+          title="Buy me a coffee ☕"
+        >
+          <Coffee weight="bold" aria-hidden="true" />
+          <span className="hidden sm:inline">Support</span>
+        </a>
 
         {/* Divider */}
         <div className="divider-vertical h-6" aria-hidden="true" />
