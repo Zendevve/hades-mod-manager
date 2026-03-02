@@ -22,4 +22,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('import-log', handler)
     return () => ipcRenderer.removeListener('import-log', handler)
   },
+
+  // Mod Downloading
+  installModFromUrl: (url) => ipcRenderer.invoke('install-mod-from-url', url),
+  installLocalMod: (modName) => ipcRenderer.invoke('install-local-mod', modName),
+  onDownloadStatus: (callback) => {
+    const handler = (_event, data) => callback(data)
+    ipcRenderer.on('download-status', handler)
+    return () => ipcRenderer.removeListener('download-status', handler)
+  },
 })

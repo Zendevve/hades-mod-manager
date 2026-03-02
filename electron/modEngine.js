@@ -245,3 +245,126 @@ function runPythonScript(cwd, args, webContents) {
     }, 60000)
   })
 }
+
+// ─── Mod Installation ────────────────────────────────────────
+
+import https from 'https'
+import http from 'http'
+import AdmZip from 'adm-zip'
+import os from 'os'
+
+export async function downloadMod(contentPath, modUrl, webContents) {
+  const modsDir = path.join(contentPath, 'Mods')
+  if (!fs.existsSync(modsDir)) {
+    fs.mkdirSync(modsDir, { recursive: true })
+  }
+
+  const tempFilePath = path.join(os.tmpdir(), `hades_mod_${Date.now()}.zip`)
+
+  try {
+    webContents.send('download-status', { status: 'Downloading...', progress: 0 })
+
+    await new Promise((resolve, reject) => {
+      const client = modUrl.startsWith('https') ? https : http
+      client.get(modUrl, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          // Handle redirect
+          downloadMod(contentPath, res.headers.location, webContents).then(resolve).catch(reject);
+          return;
+        }
+
+        if (res.statusCode !== 200) {
+          reject(new Error(`Failed to download: ${res.statusCode} ${res.statusMessage}`))
+          return
+        }
+
+        const totalLength = parseInt(res.headers['content-length'] || '0', 10)
+        let downloadedLength = 0
+
+        const fileStream = fs.createWriteStream(tempFilePath)
+        res.pipe(fileStream)
+
+        res.on('data', (chunk) => {
+          downloadedLength += chunk.length
+          if (totalLength > 0) {
+            const progress = Math.round((downloadedLength / totalLength) * 100)
+            webContents.send('download-status', { status: `Downloading... ${progress}%`, progress })
+          } else {
+            webContents.send('download-status', { status: `Downloading... ${Math.round(downloadedLength / 1024 / 1024)}MB`, progress: -1 })
+          }
+        })
+
+        fileStream.on('finish', () => {
+          fileStream.close()
+          resolve()
+        })
+      }).on('error', (err) => {
+        reject(err)
+      })
+    })
+
+    webContents.send('download-status', { status: 'Extracting...', progress: 100 })
+
+    const zip = new AdmZip(tempFilePath)
+    const zipEntries = zip.getEntries()
+
+    // Find the directory containing modfile.txt
+    let modfileEntry = zipEntries.find(e => e.entryName.toLowerCase().endsWith('modfile.txt'))
+    if (!modfileEntry) {
+      throw new Error('No modfile.txt found in the downloaded archive. This might not be a valid Hades 1 mod.')
+    }
+
+    const modRootDir = modfileEntry.entryName.substring(0, modfileEntry.entryName.length - 'modfile.txt'.length)
+
+    // Guess the mod name from the root directory or fallback to a timestamp
+    let modName = modRootDir.split('/').filter(Boolean).pop()
+    if (!modName || modName === '.' || modName === '') {
+      modName = `DownloadedMod_${Date.now()}`
+    }
+
+    const outputDir = path.join(modsDir, modName)
+
+    // Extract everything that is under the modRootDir
+    zipEntries.forEach(entry => {
+      if (entry.entryName.startsWith(modRootDir)) {
+        const relativePath = entry.entryName.substring(modRootDir.length);
+        // Ignore directory entries, extractAllTo is better but we need to strip prefix
+        if (!entry.isDirectory && relativePath) {
+          const destPath = path.join(outputDir, relativePath);
+          fs.mkdirSync(path.dirname(destPath), { recursive: true });
+          fs.writeFileSync(destPath, entry.getData());
+        }
+      }
+    })
+
+    webContents.send('download-status', { status: 'Installation Complete!', progress: 100 })
+    return { success: true, modName }
+
+  } finally {
+    if (fs.existsSync(tempFilePath)) {
+      try {
+        fs.unlinkSync(tempFilePath)
+      } catch (e) {
+        console.error('Failed to cleanup temp file:', e)
+      }
+    }
+  }
+}
+
+export async function installLocalMod(contentPath, srcModName) {
+  const modsDir = path.join(contentPath, 'Mods')
+  if (!fs.existsSync(modsDir)) {
+    fs.mkdirSync(modsDir, { recursive: true })
+  }
+
+  const srcPath = path.resolve(__dirname, `../../SGG-Mod-Format/${srcModName}`)
+  const destPath = path.join(modsDir, srcModName)
+
+  if (!fs.existsSync(srcPath)) {
+    throw new Error(`Bundled mod ${srcModName} not found at ${srcPath}`)
+  }
+
+  copyDirSync(srcPath, destPath)
+  return { success: true, modName: srcModName }
+}
+

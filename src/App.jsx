@@ -6,6 +6,7 @@ import ModDetail from './components/ModDetail'
 import ActionBar from './components/ActionBar'
 import LogViewer from './components/LogViewer'
 import WelcomeScreen from './components/WelcomeScreen'
+import ModDownloader from './components/ModDownloader'
 
 export default function App() {
   const [gamePath, setGamePath] = useState('')
@@ -16,6 +17,7 @@ export default function App() {
   const [runStatus, setRunStatus] = useState('')
   const [logs, setLogs] = useState([])
   const [logOpen, setLogOpen] = useState(false)
+  const [isDownloaderOpen, setIsDownloaderOpen] = useState(false)
 
   useEffect(() => {
     async function init() {
@@ -130,6 +132,7 @@ export default function App() {
         gamePath={gamePath}
         onChangePath={handleSelectGamePath}
         isConnected={!!gamePath}
+        onOpenDownloader={() => setIsDownloaderOpen(true)}
       />
 
       <div className="flex-1 flex overflow-hidden p-4 gap-4 pb-24 z-10 relative">
@@ -173,6 +176,12 @@ export default function App() {
         logs={logs}
         isOpen={logOpen}
         onToggle={() => setLogOpen(!logOpen)}
+      />
+
+      <ModDownloader
+        isOpen={isDownloaderOpen}
+        onClose={() => setIsDownloaderOpen(false)}
+        onInstalled={refreshMods}
       />
     </main>
   )

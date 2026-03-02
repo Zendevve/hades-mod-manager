@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
-import { detectPython, scanMods, toggleMod, ensureImporter, runImporter, runRestore } from './modEngine.js'
+import { detectPython, scanMods, toggleMod, ensureImporter, runImporter, runRestore, downloadMod, installLocalMod } from './modEngine.js'
 import { get as getSetting, set as setSetting } from './settings.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -145,6 +145,30 @@ ipcMain.handle('run-restore', async () => {
     ensureImporter(gamePath)
     const result = await runRestore(gamePath, mainWindow.webContents)
     return { success: true, ...result }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle('install-mod-from-url', async (_, modUrl) => {
+  const gamePath = getSetting('gamePath', '')
+  if (!gamePath) return { success: false, error: 'No game path set.' }
+
+  try {
+    const result = await downloadMod(gamePath, modUrl, mainWindow.webContents)
+    return result
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle('install-local-mod', async (_, srcModName) => {
+  const gamePath = getSetting('gamePath', '')
+  if (!gamePath) return { success: false, error: 'No game path set.' }
+
+  try {
+    const result = await installLocalMod(gamePath, srcModName)
+    return result
   } catch (err) {
     return { success: false, error: err.message }
   }

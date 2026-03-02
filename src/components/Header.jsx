@@ -1,7 +1,7 @@
 import React from 'react'
-import { FolderOpen, Flame, MapPin } from '@phosphor-icons/react'
+import { FolderOpen, Flame, MapPin, DownloadSimple } from '@phosphor-icons/react'
 
-export default function Header({ gamePath, onChangePath, isConnected }) {
+export default function Header({ gamePath, onChangePath, isConnected, onOpenDownloader }) {
   const shortPath = gamePath.length > 40
     ? '...' + gamePath.slice(-37)
     : gamePath
@@ -35,6 +35,16 @@ export default function Header({ gamePath, onChangePath, isConnected }) {
         >
           <FolderOpen weight="bold" />
           <span>Change</span>
+        </button>
+
+        <div className="w-px h-6 bg-white/10 mx-1" />
+
+        <button
+          onClick={onOpenDownloader}
+          className="btn-magnetic px-4 py-1.5 text-xs font-semibold rounded-full bg-gradient-to-r from-gold-500 to-gold-400 hover:from-gold-400 hover:to-gold-300 text-zinc-950 transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(232,166,52,0.3)]"
+        >
+          <DownloadSimple weight="bold" />
+          <span>Get More Mods</span>
         </button>
       </div>
 
