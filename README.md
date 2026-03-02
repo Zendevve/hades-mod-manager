@@ -1,6 +1,6 @@
 # Hades Mod Manager
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](./package.json)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](./package.json)
 [![Electron](https://img.shields.io/badge/Electron-33.2.0-47848F?logo=electron)](https://www.electronjs.org/)
 [![React](https://img.shields.io/badge/React-18.3.1-61DAFB?logo=react)](https://react.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4.2.1-38B2AC?logo=tailwind-css)](https://tailwindcss.com/)
