@@ -1,15 +1,41 @@
-import React from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowsClockwise, FileArchive, CheckCircle, CircleDashed } from '@phosphor-icons/react'
+import { ArrowsClockwise, FileArchive, CheckCircle, CircleDashed, Spinner } from '@phosphor-icons/react'
 import clsx from 'clsx'
 
 export default function ModList({ mods, selectedMod, onSelectMod, onToggleMod, onRefresh }) {
+  // Track which mod is currently being toggled
+  const [togglingMod, setTogglingMod] = useState(null)
+  // Use ref to track debounce timeout
+  const debounceRef = useRef(null)
+
   // Sort: Enabled first, then alphabetically
   const sortedMods = [...mods].sort((a, b) => {
     if (a.enabled && !b.enabled) return -1
     if (!a.enabled && b.enabled) return 1
     return a.name.localeCompare(b.name)
   })
+
+  // Debounced toggle handler
+  const handleToggle = useCallback((modName, enabled) => {
+    // Prevent toggling if already toggling this mod
+    if (togglingMod === modName) return
+
+    // Clear any existing debounce timeout
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+    }
+
+    // Set debounce timeout (300ms)
+    debounceRef.current = setTimeout(async () => {
+      setTogglingMod(modName)
+      try {
+        await onToggleMod(modName, enabled)
+      } finally {
+        setTogglingMod(null)
+      }
+    }, 300)
+  }, [togglingMod, onToggleMod])
 
   return (
     <div className="w-[340px] flex flex-col glass-panel rounded-3xl overflow-hidden shrink-0">
@@ -63,12 +89,27 @@ export default function ModList({ mods, selectedMod, onSelectMod, onToggleMod, o
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      onToggleMod(mod.name, !mod.enabled)
+                      handleToggle(mod.name, !mod.enabled)
                     }}
-                    className="btn-magnetic relative flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center overflow-hidden bg-zinc-900 border border-white/5 shadow-inner"
+                    disabled={togglingMod === mod.name}
+                    className={clsx(
+                      "btn-magnetic relative flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center overflow-hidden bg-zinc-900 border border-white/5 shadow-inner transition-opacity",
+                      togglingMod === mod.name && "opacity-50 cursor-not-allowed"
+                    )}
                   >
                     <AnimatePresence mode="popLayout">
-                      {mod.enabled ? (
+                      {togglingMod === mod.name ? (
+                        <motion.div
+                          key="loading"
+                          initial={{ scale: 0, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 0, opacity: 0 }}
+                          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                          className="absolute inset-0 flex items-center justify-center text-slate-400"
+                        >
+                          <Spinner weight="bold" size={18} className="animate-spin" />
+                        </motion.div>
+                      ) : mod.enabled ? (
                         <motion.div
                           key="enabled"
                           initial={{ scale: 0, opacity: 0 }}

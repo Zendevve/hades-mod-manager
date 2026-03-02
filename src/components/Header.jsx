@@ -1,7 +1,15 @@
 import React from 'react'
-import { FolderOpen, Flame, MapPin, DownloadSimple } from '@phosphor-icons/react'
+import { FolderOpen, Flame, MapPin, DownloadSimple, ArrowsClockwise } from '@phosphor-icons/react'
 
-export default function Header({ gamePath, onChangePath, isConnected, onOpenDownloader }) {
+export default function Header({
+  gamePath,
+  onChangePath,
+  isConnected,
+  onOpenDownloader,
+  pythonInfo,
+  onRefreshPython,
+  isRefreshingPython
+}) {
   const shortPath = gamePath.length > 40
     ? '...' + gamePath.slice(-37)
     : gamePath
@@ -14,6 +22,24 @@ export default function Header({ gamePath, onChangePath, isConnected, onOpenDown
         <h1 className="font-sans font-bold tracking-tight text-sm uppercase bg-gradient-to-br from-gold-400 to-ember-500 bg-clip-text text-transparent">
           Hades Mod Manager
         </h1>
+        {/* Python Status Indicator */}
+        <div className="flex items-center gap-2 ml-4">
+          <div className={`w-2 h-2 rounded-full ${pythonInfo?.found ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+          <span className="text-xs text-slate-400">
+            {pythonInfo?.found ? 'Python Ready' : 'Python Not Found'}
+          </span>
+          <button
+            onClick={onRefreshPython}
+            disabled={isRefreshingPython}
+            className="ml-1 p-1 rounded-full hover:bg-white/10 transition-colors disabled:opacity-50"
+            title="Refresh Python Detection"
+          >
+            <ArrowsClockwise
+              weight="bold"
+              className={`w-3 h-3 text-slate-400 ${isRefreshingPython ? 'animate-spin' : ''}`}
+            />
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-4" style={{ WebkitAppRegion: 'no-drag' }}>

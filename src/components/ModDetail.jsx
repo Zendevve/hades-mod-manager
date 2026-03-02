@@ -72,7 +72,7 @@ export default function ModDetail({ mod }) {
               <BracketsAngle weight="bold" /> Import Types
             </h3>
             <div className="flex flex-wrap gap-2">
-              {mod.types.length > 0 ? mod.types.map(t => (
+              {mod.importTypes.length > 0 ? mod.importTypes.map(t => (
                 <span key={t} className="px-2 py-1 rounded bg-white/5 text-xs font-mono text-slate-300">
                   {t}
                 </span>
@@ -105,7 +105,7 @@ export default function ModDetail({ mod }) {
           <div className="relative group">
             <div className="absolute inset-0 bg-gradient-to-r from-gold-500/10 to-ember-500/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl blur-md -z-10" />
             <pre className="p-4 rounded-xl bg-zinc-950 border border-white/5 text-xs font-mono text-slate-400 overflow-x-auto whitespace-pre-wrap">
-              {mod.rawModfile || 'No modfile.txt active.'}
+              {mod.raw || 'No modfile.txt active.'}
             </pre>
           </div>
         </motion.div>

@@ -3,6 +3,67 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { DownloadSimple, MagnifyingGlass, X, Link, Package, Sparkle, SpinnerGap } from '@phosphor-icons/react'
 import clsx from 'clsx'
 
+// ─── URL Validation ──────────────────────────────────────────
+
+/**
+ * Validates URL format to prevent invalid download attempts
+ * @param {string} url - The URL to validate
+ * @returns {Object} Validation result with isValid and error properties
+ */
+function validateUrlFormat(url) {
+  if (!url || typeof url !== 'string') {
+    return { isValid: false, error: 'URL is required' }
+  }
+
+  const trimmedUrl = url.trim()
+
+  if (trimmedUrl === '') {
+    return { isValid: false, error: 'URL cannot be empty' }
+  }
+
+  let parsedUrl
+  try {
+    parsedUrl = new URL(trimmedUrl)
+  } catch (error) {
+    return { isValid: false, error: 'Invalid URL format. Please enter a valid URL starting with http:// or https://' }
+  }
+
+  // Only allow HTTP and HTTPS protocols
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    return { isValid: false, error: `URL protocol "${parsedUrl.protocol}" is not allowed. Only HTTP and HTTPS are supported.` }
+  }
+
+  // Validate hostname exists
+  if (!parsedUrl.hostname) {
+    return { isValid: false, error: 'URL must include a valid hostname' }
+  }
+
+  // Check for suspicious characters that might indicate injection attempts
+  const suspiciousPatterns = [
+    /[<>\"'\`]/,  // HTML/script injection chars
+    /\s/,           // Whitespace in URL
+    /\.\./,         // Path traversal attempt
+    /\/\//,         // Double slash (potential confusion)
+  ]
+
+  for (const pattern of suspiciousPatterns) {
+    if (pattern.test(trimmedUrl)) {
+      return { isValid: false, error: 'URL contains invalid characters' }
+    }
+  }
+
+  // Validate that it's likely a zip file or from a known source
+  const isZipUrl = trimmedUrl.toLowerCase().endsWith('.zip') ||
+    parsedUrl.pathname.toLowerCase().endsWith('.zip')
+
+  if (!isZipUrl) {
+    // Warn but don't block - could be a redirect URL
+    console.warn('URL does not appear to be a direct ZIP file link:', trimmedUrl)
+  }
+
+  return { isValid: true, url: trimmedUrl }
+}
+
 // ─── Dummy Curated List (Later can be fetched from a raw JSON on GH)
 const CURATED_MODS = [
   {
@@ -60,6 +121,15 @@ export default function ModDownloader({ isOpen, onClose, onInstalled }) {
 
     if (!isLocal && !targetUrl) return
 
+    // Validate URL format before attempting download (for non-local mods)
+    if (!isLocal && targetUrl) {
+      const validation = validateUrlFormat(targetUrl)
+      if (!validation.isValid) {
+        setErrorStatus(validation.error)
+        return
+      }
+    }
+
     setIsInstalling(true)
     setErrorStatus(null)
     setInstallStatus(isLocal ? `Installing bundled ${modDef.localBundle}...` : 'Initiating download...')
@@ -89,6 +159,14 @@ export default function ModDownloader({ isOpen, onClose, onInstalled }) {
 
   const handleManualSubmit = (e) => {
     e.preventDefault()
+
+    // Validate URL before submission
+    const validation = validateUrlFormat(urlInput)
+    if (!validation.isValid) {
+      setErrorStatus(validation.error)
+      return
+    }
+
     handleInstallUrl(urlInput)
   }
 
@@ -231,9 +309,18 @@ export default function ModDownloader({ isOpen, onClose, onInstalled }) {
                         <input
                           type="url"
                           value={urlInput}
-                          onChange={(e) => setUrlInput(e.target.value)}
+                          onChange={(e) => {
+                            setUrlInput(e.target.value)
+                            // Clear error when user starts typing
+                            if (errorStatus) setErrorStatus(null)
+                          }}
                           placeholder="https://github.com/.../release.zip"
-                          className="flex-1 bg-black/50 border border-white/10 rounded-xl py-3 pl-4 pr-32 text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-gold-500/50 transition-colors"
+                          className={clsx(
+                            "flex-1 bg-black/50 border rounded-xl py-3 pl-4 pr-32 text-slate-300 placeholder:text-slate-600 focus:outline-none transition-colors",
+                            errorStatus
+                              ? "border-red-500/50 focus:border-red-500"
+                              : "border-white/10 focus:border-gold-500/50"
+                          )}
                           required
                         />
                         <button

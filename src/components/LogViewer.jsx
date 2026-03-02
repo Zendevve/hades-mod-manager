@@ -1,9 +1,9 @@
 import React, { useRef, useEffect } from 'react'
-import { CaretUp, CaretDown, TerminalWindow } from '@phosphor-icons/react'
+import { CaretUp, CaretDown, TerminalWindow, Trash } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import clsx from 'clsx'
 
-export default function LogViewer({ logs, isOpen, onToggle }) {
+export default function LogViewer({ logs, isOpen, onToggle, onClear }) {
   const scrollRef = useRef(null)
 
   useEffect(() => {
@@ -32,11 +32,23 @@ export default function LogViewer({ logs, isOpen, onToggle }) {
       <div className="w-full h-full bg-[#050505] border-t border-white/10 rounded-t-3xl shadow-[0_-20px_50px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden relative">
 
         {/* Header Block */}
-        <div className="h-10 border-b border-white/5 bg-zinc-950/50 flex items-center px-6 gap-3 shrink-0">
-          <TerminalWindow weight="duotone" className="text-slate-500" />
-          <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500 font-semibold">
-            Mod Engine Terminal
-          </span>
+        <div className="h-10 border-b border-white/5 bg-zinc-950/50 flex items-center px-6 gap-3 shrink-0 justify-between">
+          <div className="flex items-center gap-3">
+            <TerminalWindow weight="duotone" className="text-slate-500" />
+            <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500 font-semibold">
+              Mod Engine Terminal
+            </span>
+          </div>
+          {onClear && logs.length > 0 && (
+            <button
+              onClick={onClear}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-medium text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+              title="Clear logs"
+            >
+              <Trash weight="bold" className="w-3.5 h-3.5" />
+              <span>Clear</span>
+            </button>
+          )}
         </div>
 
         {/* Content Area */}

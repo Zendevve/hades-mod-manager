@@ -21,7 +21,16 @@ function load() {
     } else {
       cache = {}
     }
-  } catch {
+  } catch (err) {
+    console.error('Failed to parse settings file:', err)
+    // Backup the corrupted settings file
+    try {
+      const backupPath = `${settingsPath}.backup.${Date.now()}`
+      fs.copyFileSync(settingsPath, backupPath)
+      console.error(`Corrupted settings file backed up to: ${backupPath}`)
+    } catch (backupErr) {
+      console.error('Failed to backup corrupted settings file:', backupErr)
+    }
     cache = {}
   }
   return cache
@@ -33,7 +42,10 @@ function save() {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true })
     }
-    fs.writeFileSync(settingsPath, JSON.stringify(cache, null, 2), 'utf-8')
+    // Atomic write: write to temp file, then rename
+    const tempPath = `${settingsPath}.tmp`
+    fs.writeFileSync(tempPath, JSON.stringify(cache, null, 2), 'utf-8')
+    fs.renameSync(tempPath, settingsPath)
   } catch (err) {
     console.error('Failed to save settings:', err)
   }

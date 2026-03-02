@@ -4,6 +4,33 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { detectPython, scanMods, toggleMod, ensureImporter, runImporter, runRestore, downloadMod, installLocalMod } from './modEngine.js'
 import { get as getSetting, set as setSetting } from './settings.js'
+import {
+  GET_SETTINGS,
+  GET_CUSTOM_PATHS,
+  ADD_CUSTOM_PATH,
+  REMOVE_CUSTOM_PATH,
+  REFRESH_PYTHON,
+  SELECT_GAME_PATH,
+  AUTO_DETECT_GAME,
+  SCAN_MODS,
+  TOGGLE_MOD,
+  RUN_IMPORT,
+  RUN_RESTORE,
+  INSTALL_MOD_FROM_URL,
+  INSTALL_LOCAL_MOD,
+} from './ipcChannels.js'
+
+// ─── Default Game Detection Paths ────────────────────────────
+// These are the default paths checked when auto-detecting the game.
+// Users can add custom paths via settings which will be checked first.
+const DEFAULT_GAME_PATHS = [
+  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Hades\\Content',
+  'C:\\Program Files\\Steam\\steamapps\\common\\Hades\\Content',
+  'D:\\SteamLibrary\\steamapps\\common\\Hades\\Content',
+  'E:\\SteamLibrary\\steamapps\\common\\Hades\\Content',
+  'C:\\Program Files\\Epic Games\\Hades\\Content',
+  path.join(process.env.HOME || process.env.USERPROFILE || '', 'Library/Application Support/Steam/steamapps/common/Hades/Content'),
+]
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -49,14 +76,52 @@ function createWindow() {
 
 // ─── IPC Handlers ────────────────────────────────────────────
 
-ipcMain.handle('get-settings', () => {
+ipcMain.handle(GET_SETTINGS, () => {
   return {
     gamePath: getSetting('gamePath', ''),
     pythonPath: detectPython(),
   }
 })
 
-ipcMain.handle('select-game-path', async () => {
+// Refresh Python detection on demand (for when Python is installed after app starts)
+ipcMain.handle(REFRESH_PYTHON, () => {
+  const pythonInfo = detectPython()
+  return pythonInfo
+})
+
+// Get user's custom game detection paths
+ipcMain.handle(GET_CUSTOM_PATHS, () => {
+  return getSetting('customGamePaths', [])
+})
+
+// Add a custom game detection path
+ipcMain.handle(ADD_CUSTOM_PATH, (_, customPath) => {
+  try {
+    const customPaths = getSetting('customGamePaths', [])
+    if (!customPaths.includes(customPath)) {
+      customPaths.push(customPath)
+      setSetting('customGamePaths', customPaths)
+      return { success: true, paths: customPaths }
+    }
+    return { success: true, paths: customPaths, message: 'Path already exists' }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+// Remove a custom game detection path
+ipcMain.handle(REMOVE_CUSTOM_PATH, (_, customPath) => {
+  try {
+    const customPaths = getSetting('customGamePaths', [])
+    const filtered = customPaths.filter(p => p !== customPath)
+    setSetting('customGamePaths', filtered)
+    return { success: true, paths: filtered }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle(SELECT_GAME_PATH, async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Select Hades Content Folder',
     properties: ['openDirectory'],
@@ -81,26 +146,21 @@ ipcMain.handle('select-game-path', async () => {
   return { success: false, error: 'No folder selected.' }
 })
 
-ipcMain.handle('auto-detect-game', () => {
-  const commonPaths = [
-    'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Hades\\Content',
-    'C:\\Program Files\\Steam\\steamapps\\common\\Hades\\Content',
-    'D:\\SteamLibrary\\steamapps\\common\\Hades\\Content',
-    'E:\\SteamLibrary\\steamapps\\common\\Hades\\Content',
-    'C:\\Program Files\\Epic Games\\Hades\\Content',
-    path.join(process.env.HOME || process.env.USERPROFILE || '', 'Library/Application Support/Steam/steamapps/common/Hades/Content'),
-  ]
+ipcMain.handle(AUTO_DETECT_GAME, () => {
+  // Combine user custom paths (checked first) with default paths
+  const customPaths = getSetting('customGamePaths', [])
+  const allPaths = [...customPaths, ...DEFAULT_GAME_PATHS]
 
-  for (const p of commonPaths) {
+  for (const p of allPaths) {
     if (fs.existsSync(p) && fs.existsSync(path.join(p, 'Scripts'))) {
       setSetting('gamePath', p)
       return { success: true, path: p }
     }
   }
-  return { success: false }
+  return { success: false, error: 'Game not found in any configured paths' }
 })
 
-ipcMain.handle('scan-mods', async () => {
+ipcMain.handle(SCAN_MODS, async () => {
   const gamePath = getSetting('gamePath', '')
   if (!gamePath) return { success: false, error: 'No game path set.' }
 
@@ -112,7 +172,7 @@ ipcMain.handle('scan-mods', async () => {
   }
 })
 
-ipcMain.handle('toggle-mod', async (_, modName, enabled) => {
+ipcMain.handle(TOGGLE_MOD, async (_, modName, enabled) => {
   const gamePath = getSetting('gamePath', '')
   if (!gamePath) return { success: false, error: 'No game path set.' }
 
@@ -124,7 +184,7 @@ ipcMain.handle('toggle-mod', async (_, modName, enabled) => {
   }
 })
 
-ipcMain.handle('run-import', async () => {
+ipcMain.handle(RUN_IMPORT, async () => {
   const gamePath = getSetting('gamePath', '')
   if (!gamePath) return { success: false, error: 'No game path set.' }
 
@@ -137,7 +197,7 @@ ipcMain.handle('run-import', async () => {
   }
 })
 
-ipcMain.handle('run-restore', async () => {
+ipcMain.handle(RUN_RESTORE, async () => {
   const gamePath = getSetting('gamePath', '')
   if (!gamePath) return { success: false, error: 'No game path set.' }
 
@@ -150,7 +210,7 @@ ipcMain.handle('run-restore', async () => {
   }
 })
 
-ipcMain.handle('install-mod-from-url', async (_, modUrl) => {
+ipcMain.handle(INSTALL_MOD_FROM_URL, async (_, modUrl) => {
   const gamePath = getSetting('gamePath', '')
   if (!gamePath) return { success: false, error: 'No game path set.' }
 
@@ -162,7 +222,7 @@ ipcMain.handle('install-mod-from-url', async (_, modUrl) => {
   }
 })
 
-ipcMain.handle('install-local-mod', async (_, srcModName) => {
+ipcMain.handle(INSTALL_LOCAL_MOD, async (_, srcModName) => {
   const gamePath = getSetting('gamePath', '')
   if (!gamePath) return { success: false, error: 'No game path set.' }
 

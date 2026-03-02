@@ -7,17 +7,20 @@ import ActionBar from './components/ActionBar'
 import LogViewer from './components/LogViewer'
 import WelcomeScreen from './components/WelcomeScreen'
 import ModDownloader from './components/ModDownloader'
+import { useModOperations, STATES } from './hooks/useModOperations'
 
 export default function App() {
   const [gamePath, setGamePath] = useState('')
   const [pythonInfo, setPythonInfo] = useState({ found: false })
+  const [isRefreshingPython, setIsRefreshingPython] = useState(false)
   const [mods, setMods] = useState([])
   const [selectedMod, setSelectedMod] = useState(null)
-  const [isRunning, setIsRunning] = useState(false)
-  const [runStatus, setRunStatus] = useState('')
   const [logs, setLogs] = useState([])
   const [logOpen, setLogOpen] = useState(false)
   const [isDownloaderOpen, setIsDownloaderOpen] = useState(false)
+
+  // Use state machine for import/restore operations
+  const modOperations = useModOperations()
 
   useEffect(() => {
     async function init() {
@@ -28,15 +31,43 @@ export default function App() {
     init()
   }, [])
 
+  // Handle Python re-detection
+  const handleRefreshPython = useCallback(async () => {
+    setIsRefreshingPython(true)
+    try {
+      const result = await window.electronAPI.refreshPython()
+      setPythonInfo(result)
+      setLogs(prev => [...prev, {
+        type: result.found ? 'info' : 'stderr',
+        text: result.found
+          ? `Python detected: ${result.version}\n`
+          : 'Python not found. Please install Python and try again.\n'
+      }])
+    } catch (err) {
+      console.error('Failed to refresh Python detection:', err)
+      setLogs(prev => [...prev, { type: 'stderr', text: `Failed to detect Python: ${err.message}\n` }])
+    } finally {
+      setIsRefreshingPython(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (gamePath) refreshMods()
   }, [gamePath])
 
   useEffect(() => {
     const cleanup = window.electronAPI.onImportLog((data) => {
-      setLogs(prev => [...prev, data])
+      setLogs(prev => {
+        const updated = [...prev, data]
+        // Keep only the most recent 1000 entries to prevent memory leaks
+        return updated.length > 1000 ? updated.slice(-1000) : updated
+      })
     })
     return cleanup
+  }, [])
+
+  const handleClearLogs = useCallback(() => {
+    setLogs([])
   }, [])
 
   const refreshMods = useCallback(async () => {
@@ -62,49 +93,80 @@ export default function App() {
   }
 
   const handleToggleMod = async (modName, enabled) => {
-    await window.electronAPI.toggleMod(modName, enabled)
-    await refreshMods()
+    try {
+      const result = await window.electronAPI.toggleMod(modName, enabled)
+      if (!result.success) {
+        console.error(`Failed to toggle mod ${modName}:`, result.error)
+        setLogs(prev => [...prev, { type: 'stderr', text: `Failed to toggle mod ${modName}: ${result.error}\n` }])
+      }
+      await refreshMods()
+    } catch (err) {
+      console.error(`Error toggling mod ${modName}:`, err)
+      setLogs(prev => [...prev, { type: 'stderr', text: `Error toggling mod ${modName}: ${err.message}\n` }])
+    }
   }
 
   const handleImport = async () => {
-    setIsRunning(true)
-    setRunStatus('Importing mods...')
+    // State machine prevents starting if already running
+    if (!modOperations.startImport()) {
+      console.warn('[App] Import already in progress, ignoring request')
+      return
+    }
+
     setLogs([{ type: 'info', text: '═══ Starting mod import ═══\n' }])
     setLogOpen(true)
 
-    const result = await window.electronAPI.runImport()
+    try {
+      const result = await window.electronAPI.runImport()
 
-    if (result.success) {
-      setRunStatus(`Import complete (exit code: ${result.code})`)
-      setLogs(prev => [...prev, { type: 'info', text: '\n═══ Import finished ═══\n' }])
-    } else {
-      setRunStatus(`Error: ${result.error}`)
-      setLogs(prev => [...prev, { type: 'stderr', text: `\nError: ${result.error}\n` }])
+      if (result.success) {
+        modOperations.complete(result)
+        setLogs(prev => [...prev, { type: 'info', text: `\n═══ Import finished (exit code: ${result.code}) ═══\n` }])
+      } else {
+        modOperations.error(result.error || 'Import failed')
+        setLogs(prev => [...prev, { type: 'stderr', text: `\nError: ${result.error}\n` }])
+      }
+    } catch (err) {
+      const errorMessage = err.message || 'Unknown error during import'
+      modOperations.error(errorMessage)
+      setLogs(prev => [...prev, { type: 'stderr', text: `\nError: ${errorMessage}\n` }])
     }
 
-    setIsRunning(false)
     await refreshMods()
   }
 
   const handleRestore = async () => {
-    setIsRunning(true)
-    setRunStatus('Restoring original files...')
+    // State machine prevents starting if already running
+    if (!modOperations.startRestore()) {
+      console.warn('[App] Restore already in progress, ignoring request')
+      return
+    }
+
     setLogs([{ type: 'info', text: '═══ Starting restore ═══\n' }])
     setLogOpen(true)
 
-    const result = await window.electronAPI.runRestore()
+    try {
+      const result = await window.electronAPI.runRestore()
 
-    if (result.success) {
-      setRunStatus(`Restore complete (exit code: ${result.code})`)
-      setLogs(prev => [...prev, { type: 'info', text: '\n═══ Restore finished ═══\n' }])
-    } else {
-      setRunStatus(`Error: ${result.error}`)
-      setLogs(prev => [...prev, { type: 'stderr', text: `\nError: ${result.error}\n` }])
+      if (result.success) {
+        modOperations.complete(result)
+        setLogs(prev => [...prev, { type: 'info', text: `\n═══ Restore finished (exit code: ${result.code}) ═══\n` }])
+      } else {
+        modOperations.error(result.error || 'Restore failed')
+        setLogs(prev => [...prev, { type: 'stderr', text: `\nError: ${result.error}\n` }])
+      }
+    } catch (err) {
+      const errorMessage = err.message || 'Unknown error during restore'
+      modOperations.error(errorMessage)
+      setLogs(prev => [...prev, { type: 'stderr', text: `\nError: ${errorMessage}\n` }])
     }
 
-    setIsRunning(false)
     await refreshMods()
   }
+
+  const handleResetState = useCallback(() => {
+    modOperations.reset()
+  }, [modOperations])
 
   if (!gamePath) {
     return (
@@ -133,6 +195,9 @@ export default function App() {
         onChangePath={handleSelectGamePath}
         isConnected={!!gamePath}
         onOpenDownloader={() => setIsDownloaderOpen(true)}
+        pythonInfo={pythonInfo}
+        onRefreshPython={handleRefreshPython}
+        isRefreshingPython={isRefreshingPython}
       />
 
       <div className="flex-1 flex overflow-hidden p-4 gap-4 pb-24 z-10 relative">
@@ -166,8 +231,9 @@ export default function App() {
       <ActionBar
         onImport={handleImport}
         onRestore={handleRestore}
-        isRunning={isRunning}
-        runStatus={runStatus}
+        onReset={handleResetState}
+        state={modOperations.state}
+        statusMessage={modOperations.statusMessage}
         enabledCount={enabledCount}
         hasPython={pythonInfo.found}
       />
@@ -176,6 +242,7 @@ export default function App() {
         logs={logs}
         isOpen={logOpen}
         onToggle={() => setLogOpen(!logOpen)}
+        onClear={handleClearLogs}
       />
 
       <ModDownloader
